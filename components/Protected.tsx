@@ -1,14 +1,22 @@
 "use client";
 
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/auth";
 
-export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
+export default function ProtectedRoute({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+
   useEffect(() => {
     if (!getToken()) {
-      window.location.href = "/login";
+      router.replace("/login");
     }
-  }, []);
+  }, [router]);
 
+  // ⬇️ SELALU render children
   return <>{children}</>;
 }

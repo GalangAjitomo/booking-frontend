@@ -1,4 +1,4 @@
-import { getToken, logout } from "./auth";
+import { logout } from "./auth";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -6,10 +6,7 @@ export async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = getToken();
-
-  console.log("[API] Request:", path);
-  console.log("[API] Token:", token);
+  const token = localStorage.getItem("token");
 
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
@@ -20,10 +17,7 @@ export async function apiFetch<T>(
     },
   });
 
-  console.log("[API] Status:", res.status);
-
   if (res.status === 401) {
-    console.warn("[API] Unauthorized");
     logout();
     throw new Error("Unauthorized");
   }
@@ -31,6 +25,10 @@ export async function apiFetch<T>(
   if (!res.ok) {
     const msg = await res.text();
     throw new Error(msg || "Request failed");
+  }
+
+  if (res.status === 204) {
+    return undefined as T;
   }
 
   return res.json() as Promise<T>;

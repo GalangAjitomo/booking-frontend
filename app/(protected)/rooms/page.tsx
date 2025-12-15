@@ -1,145 +1,117 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Protected from "@/components/Protected";
+import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { Room } from "@/types/room";
 import { getUser } from "@/lib/auth";
-
-const PAGE_SIZE = 10;
+import RoomTable from "@/components/rooms/RoomTable";
+import RoomFormDialog from "@/components/rooms/RoomFormDialog";
+import DeleteRoomDialog from "@/components/rooms/DeleteRoomDialog";
+import { Button } from "@/components/ui/button";
+import LoadingOverlay from "@/components/ui/LoadingOverlay";
 
 export default function RoomsPage() {
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
+  const [editing, setEditing] = useState<Room | undefined>();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
 
-  const user = getUser();
-  const isAdmin = user?.roles?.includes("Admin");
+  // ⬇️ NULL = belum tahu (server & first client render SAMA)
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
+  // =========================
+  // LOAD ROOMS
+  // =========================
+  async function loadRooms() {
+    setPageLoading(true);
+    try {
+      const data = await apiFetch<Room[]>("/api/v1/rooms");
+      setRooms(data);
+    } catch (err) {
+      console.error("Failed to load rooms", err);
+    } finally {
+      setPageLoading(false);
+    }
+  }
+
+  // =========================
+  // INIT (CLIENT ONLY)
+  // =========================
   useEffect(() => {
-    async function load() {
+    let cancelled = false;
+
+    async function init() {
       try {
+        // 🔒 Ambil user SETELAH mount (AMAN)
+        const user = getUser();
+        if (!cancelled) {
+          setIsAdmin(user?.roles?.includes("Admin") ?? false);
+        }
+
         const data = await apiFetch<Room[]>("/api/v1/rooms");
-        setRooms(data);
+        if (!cancelled) {
+          setRooms(data);
+        }
       } catch (err) {
-        console.error(err);
-        setError("Failed to load rooms");
+        if (!cancelled) {
+          console.error(err);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setPageLoading(false);
+        }
       }
     }
-    load();
+
+    init();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // ===== Client-side pagination =====
-  const totalPages = Math.ceil(rooms.length / PAGE_SIZE);
-
-  const pagedRooms = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return rooms.slice(start, start + PAGE_SIZE);
-  }, [rooms, page]);
-
-  if (loading) {
-    return (
-      <Protected>
-        <p className="p-6">Loading rooms...</p>
-      </Protected>
-    );
-  }
-
-  if (error) {
-    return (
-      <Protected>
-        <p className="p-6 text-red-600">{error}</p>
-      </Protected>
-    );
-  }
-
   return (
-    <Protected>
-      <div className="p-6 space-y-4">
-        <div className="flex justify-between items-center">
-          <h1 className="text-xl font-bold">Rooms</h1>
+    <div className="relative space-y-4">
+      <div className="flex justify-between">
+        <h1 className="text-xl font-bold">Rooms</h1>
 
-          {isAdmin && (
-            <button className="px-4 py-2 bg-blue-600 text-white rounded">
-              Add Room
-            </button>
-          )}
-        </div>
-
-        <div className="overflow-x-auto border rounded">
-          <table className="min-w-full border-collapse">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="border p-2 text-left">Name</th>
-                <th className="border p-2 text-left">Location</th>
-                <th className="border p-2 text-left">Capacity</th>
-                {isAdmin && (
-                  <th className="border p-2 text-left">Actions</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {pagedRooms.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={isAdmin ? 4 : 3}
-                    className="p-4 text-center text-gray-500"
-                  >
-                    No rooms available
-                  </td>
-                </tr>
-              ) : (
-                pagedRooms.map((r) => (
-                  <tr key={r.roomId} className="hover:bg-gray-50">
-                    <td className="border p-2">{r.name}</td>
-                    <td className="border p-2">{r.location}</td>
-                    <td className="border p-2">{r.capacity}</td>
-
-                    {isAdmin && (
-                      <td className="border p-2 space-x-2">
-                        <button className="text-blue-600 hover:underline">
-                          Edit
-                        </button>
-                        <button className="text-red-600 hover:underline">
-                          Delete
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex justify-end gap-2">
-            <button
-              disabled={page === 1}
-              onClick={() => setPage((p) => p - 1)}
-              className="px-3 py-1 border rounded disabled:opacity-50"
-            >
-              Prev
-            </button>
-
-            <span className="px-2 py-1">
-              Page {page} of {totalPages}
-            </span>
-
-            <button
-              disabled={page === totalPages}
-              onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1 border rounded disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
+        {/* ⬇️ Render aman: null & false sama-sama tidak render */}
+        {isAdmin === true && (
+          <Button className="cursor-pointer" onClick={() => setFormOpen(true)}>
+            Add Room
+          </Button>
         )}
       </div>
-    </Protected>
+
+      <RoomTable
+        rooms={rooms}
+        isAdmin={isAdmin === true}
+        onEdit={(r) => {
+          setEditing(r);
+          setFormOpen(true);
+        }}
+        onDelete={(r) => setDeletingId(r.roomId)}
+      />
+
+      <RoomFormDialog
+        open={formOpen}
+        room={editing}
+        onClose={() => {
+          setFormOpen(false);
+          setEditing(undefined);
+        }}
+        onSuccess={loadRooms}
+      />
+
+      <DeleteRoomDialog
+        open={!!deletingId}
+        roomId={deletingId}
+        onClose={() => setDeletingId(null)}
+        onSuccess={loadRooms}
+      />
+
+      <LoadingOverlay show={pageLoading} />
+    </div>
   );
 }

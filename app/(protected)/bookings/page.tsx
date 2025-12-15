@@ -1,145 +1,145 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Protected from "@/components/Protected";
+import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { Booking } from "@/types/booking";
-import BookingForm from "@/components/BookingForm";
-
-const PAGE_SIZE = 10;
+import { Room } from "@/types/room";
+import BookingFormDialog from "@/components/bookings/BookingFormDialog";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // =========================
-  // FETCH DATA
+  // LOAD DATA (EFFECT ONLY)
   // =========================
-  async function loadBookings() {
-    setLoading(true);
-    setError(null);
+  useEffect(() => {
+    let cancelled = false;
 
+    async function fetchData() {
+      setLoading(true);
+      try {
+        const [bookingData, roomData] = await Promise.all([
+          apiFetch<Booking[]>("/api/v1/bookings"),
+          apiFetch<Room[]>("/api/v1/rooms"),
+        ]);
+
+        if (!cancelled) {
+          setBookings(bookingData);
+          setRooms(roomData);
+        }
+      } catch {
+        if (!cancelled) {
+          toast.error("Failed to load bookings");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    fetchData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  // =========================
+  // DELETE
+  // =========================
+  async function deleteBooking(id: string) {
     try {
-      const data = await apiFetch<Booking[]>("/api/v1/bookings");
-      setBookings(data);
-    } catch (err) {
-      console.error(err);
-      setError("Failed to load bookings");
-    } finally {
-      setLoading(false);
+      await apiFetch(`/api/v1/bookings/${id}`, {
+        method: "DELETE",
+      });
+      toast.success("Booking deleted");
+      setRefreshKey((k) => k + 1);
+    } catch {
+      toast.error("Failed to delete booking");
     }
   }
 
-  useEffect(() => {
-    loadBookings();
-  }, []);
-
   // =========================
-  // CLIENT-SIDE PAGINATION
+  // LOADING
   // =========================
-  const totalPages = Math.ceil(bookings.length / PAGE_SIZE);
-
-  const pagedBookings = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return bookings.slice(start, start + PAGE_SIZE);
-  }, [bookings, page]);
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20 text-gray-600">
+        Loading...
+      </div>
+    );
+  }
 
   return (
-    <Protected>
-      <div className="p-6 space-y-4">
-        <div className="flex justify-between items-center">
-          <h1 className="text-xl font-bold">Bookings</h1>
-
-          <button
-            onClick={loadBookings}
-            disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white rounded"
-          >
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
-        </div>
-
-        {/* CREATE BOOKING */}
-        <BookingForm onSuccess={loadBookings} />
-
-        {/* ERROR STATE */}
-        {error && (
-          <p className="text-red-600">{error}</p>
-        )}
-
-        {/* TABLE */}
-        <div className="overflow-x-auto border rounded">
-          <table className="min-w-full border-collapse">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="border p-2 text-left">Date</th>
-                <th className="border p-2 text-left">Room</th>
-                <th className="border p-2 text-left">Purpose</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={3} className="p-4 text-center">
-                    Loading bookings...
-                  </td>
-                </tr>
-              ) : pagedBookings.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={3}
-                    className="p-4 text-center text-gray-500"
-                  >
-                    No bookings found
-                  </td>
-                </tr>
-              ) : (
-                pagedBookings.map((b) => (
-                  <tr key={b.bookingId} className="hover:bg-gray-50">
-                    <td className="border p-2">
-                      {new Date(b.bookingDate).toLocaleDateString()}
-                    </td>
-                    <td className="border p-2">
-                      {b.roomId}
-                    </td>
-                    <td className="border p-2">
-                      {b.purpose || "-"}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* PAGINATION */}
-        {totalPages > 1 && (
-          <div className="flex justify-end gap-2">
-            <button
-              disabled={page === 1}
-              onClick={() => setPage(p => p - 1)}
-              className="px-3 py-1 border rounded disabled:opacity-50"
-            >
-              Prev
-            </button>
-
-            <span className="px-2 py-1">
-              Page {page} of {totalPages}
-            </span>
-
-            <button
-              disabled={page === totalPages}
-              onClick={() => setPage(p => p + 1)}
-              className="px-3 py-1 border rounded disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
-        )}
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-xl font-bold">Bookings</h1>
+        <Button onClick={() => setFormOpen(true)}>
+          Add Booking
+        </Button>
       </div>
-    </Protected>
+
+      {/* CREATE DIALOG */}
+      <BookingFormDialog
+        open={formOpen}
+        rooms={rooms}
+        onClose={() => setFormOpen(false)}
+        onSuccess={() => setRefreshKey((k) => k + 1)}
+      />
+
+      {/* TABLE */}
+      <div className="border rounded overflow-x-auto">
+        <table className="min-w-full">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="p-2 text-left">Room</th>
+              <th className="p-2 text-left">Date</th>
+              <th className="p-2 text-left">Purpose</th>
+              <th className="p-2 text-left">Action</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {bookings.length === 0 && (
+              <tr>
+                <td
+                  colSpan={4}
+                  className="p-4 text-center text-gray-500"
+                >
+                  No bookings
+                </td>
+              </tr>
+            )}
+
+            {bookings.map((b) => (
+              <tr key={b.bookingId} className="border-t">
+                <td className="p-2">{b.roomName}</td>
+                <td className="p-2">
+                  {new Date(b.bookingDate).toLocaleDateString()}
+                </td>
+                <td className="p-2">{b.purpose || "-"}</td>
+                <td className="p-2">
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => deleteBooking(b.bookingId)}
+                  >
+                    Delete
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

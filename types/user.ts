@@ -1,6 +1,12 @@
-export interface User {
+export type User = {
   id: string;
   userName: string;
   displayName: string;
-  roles: string[];
-}
+};
+
+export type UserFormDto = {
+  userName: string;
+  displayName: string;
+  password?: string; // hanya untuk create
+  isAdmin?: boolean;
+};

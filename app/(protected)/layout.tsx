@@ -1,35 +1,43 @@
 "use client";
 
-import Sidebar from "@/components/sidebar/Sidebar";
-import { getToken } from "@/lib/auth";
-import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Sidebar from "@/components/sidebar/Sidebar";
+import TopBar from "@/components/layout/TopBar";
+import { getToken } from "@/lib/auth";
 
-export default function Layout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+interface Props {
+  children: ReactNode;
+}
+
+export default function ProtectedLayout({ children }: Props) {
   const router = useRouter();
 
   useEffect(() => {
     const token = getToken();
-    console.log("[PROTECTED] token check:", token);
-
     if (!token) {
       router.replace("/login");
     }
   }, [router]);
 
-  const token = getToken();
-
-  // 🔑 Render guard (NO setState)
-  if (!token) return null;
-
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 p-6">{children}</main>
+      {/* Sidebar */}
+      <aside className="w-64 border-r bg-white">
+        <Sidebar />
+      </aside>
+
+      {/* Main area */}
+      <div className="flex flex-1 flex-col">
+        {/* Top Navbar */}
+        <TopBar />
+
+        {/* Page content */}
+        <main className="flex-1 p-6">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
